@@ -57,13 +57,15 @@ These two rules take precedence over any individual step below:
   When: As soon as Update determined to be necessary. Start by creating RFC (see [example](https://github.com/pytorch/pytorch/issues/145544)) with possible CUDA matrix to support for next release.
   Goal: Make sure everything is available to perform complete upgrade of CUDA and dependencies
 
-3. Update CUDA in CD (prerequisite for CI enablement, **not** a qualification for release)
+3. Update CUDA in CD (prerequisite for CI enablement on the same platform, **not** a qualification for release)
   When: Evaluate if we have all packages for update is complete
-  Goal: Make sure all Linux and Windows wheel and libtorch binaries are produced on nightly. Nightly binaries on their own do not qualify the version for a release; they exist so that CI can be enabled and so users can test early.
+  Goal: Make sure all Linux and Windows wheel and libtorch binaries are produced on nightly. Nightly binaries on their own do not qualify the version for a release; they exist so that CI enablement starts from a known-good build and so users can test early.
 
 4. Update CUDA in CI (**this is the necessary condition to qualify for a CUDA version to be released as Experimental**)
-  When: Update CUDA in CD is complete and nightly binaries are green
+  When: CD is green on the same platform
   Goal: Make sure the new CUDA version has both build and test jobs running in CI. All failing tests are identified, tracked with issues, and either fixed or explicitly accepted before branch cut. A version with no CI test coverage is not eligible for the release matrix.
+
+  Steps 3 and 4 are sequenced per platform, not globally, and platforms proceed in parallel: CD Linux → CI Linux, CD Windows → CI Windows, and likewise for each build variant (Linux x86, Linux aarch64, Windows). A platform whose CD is still broken does not hold back CI enablement on a platform whose CD is already green.
 
 5. Run benchmarks to compare new experimental CUDA version to current stable CUDA version
   When: Update CUDA in CI is complete
