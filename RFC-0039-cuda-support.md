@@ -36,7 +36,7 @@ Division of ownership:
 
 ### We would deprecate version of CUDA when
 
-As soon as we introduce a new Experimental Version we should consider moving the previous Experimental Version to Stable, and decommission the previous Stable version. Typically we want to support at least 2 versions of CUDA with an optional exception for Legacy Version (see below). This matches the support window stated in [RELEASE.md, Accelerator Software](https://github.com/pytorch/pytorch/blob/main/RELEASE.md#accelerator-software).
+As soon as we introduce a new Experimental Version we should consider moving the previous Experimental Version to Stable (see [Detailed Process of Transitioning CUDA version from Experimental to Stable](#detailed-process-of-transitioning-cuda-version-from-experimental-to-stable)), and decommission the previous Stable version. Typically we want to support at least 2 versions of CUDA with an optional exception for Legacy Version (see below). This matches the support window stated in [RELEASE.md, Accelerator Software](https://github.com/pytorch/pytorch/blob/main/RELEASE.md#accelerator-software).
 
 - Optional Legacy Version: If we need to have 1 version for backend compatibility or to work around the current limitation. For example: CUDA older driver is incompatible with newer CUDA version. We should keep this version as static as possible (i.e. no cuDNN, NCCL, or other libraries) to avoid mixing the legacy stack with latest libs which can lead to unexpected behavior.
 - Stable Version: This is a stable CUDA version that is used most of the time. This is the version we want to upload to PyPI.
@@ -73,6 +73,28 @@ These two rules take precedence over any individual step below:
   When: Before the release branch is cut
   Goal: Fix the Legacy / Stable / Experimental matrix for the release based on CI signal and benchmark results. Only versions in this matrix are built in the RC — we do not produce RC binaries for a CUDA version we are not planning to promote to the final release. Record the outcome in [RELEASE.md](https://github.com/pytorch/pytorch/blob/main/RELEASE.md#release-compatibility-matrix).
 
+
+### Detailed Process of Transitioning CUDA version from Experimental to Stable
+
+A CUDA version is promoted from Experimental to Stable only when all of the following conditions hold:
+
+- **It is already in the Experimental state**, i.e. it has been part of at least one release as the Latest Experimental Version.
+- **Full PyTorch CI and CD are running this version.** Not a subset: the complete CI build and test matrix (including the jobs that only run on the Stable version today), and all CD binaries — wheels and libtorch, Linux x86 and aarch64, Windows — produced on nightly. Benchmarks show no unresolved regressions against the current Stable version.
+- **Downstream projects consuming PyTorch are ready to switch to this version and have tested it.** Domain libraries (torchvision, torchaudio) build and test against it, and the ecosystem consumers tracked in the update RFC issue have confirmed readiness.
+
+As a consequence of promotion, this becomes the CUDA version we publish to PyPI.
+
+1. Confirm full CI/CD coverage
+  When: The version has shipped at least one release as Experimental
+  Goal: Move the version to the full CI matrix and confirm it is green and not flaky over a sustained period. Any job still running only on the current Stable version is either enabled on the candidate or explicitly waived.
+
+2. Confirm downstream readiness
+  When: Full CI/CD coverage is confirmed
+  Goal: Domain libraries and the downstream consumers tracked in the update RFC issue have built and tested against this version and confirmed they can switch. Promotion is not started while a required downstream consumer is still blocked.
+
+3. Promote to Stable
+  When: Steps 1 and 2 are complete, before the release branch is cut
+  Goal: The version becomes the Stable version in the release matrix and the version uploaded to PyPI — validate that its wheels fit within the PyPI size limits before committing to this. Update the matrix in [RELEASE.md](https://github.com/pytorch/pytorch/blob/main/RELEASE.md#release-compatibility-matrix) and the `latest` tag handling for released images. The previous Stable version then becomes a candidate for deprecation, see the section below.
 
 ### Detailed Process of Deprecating CUDA version
 
