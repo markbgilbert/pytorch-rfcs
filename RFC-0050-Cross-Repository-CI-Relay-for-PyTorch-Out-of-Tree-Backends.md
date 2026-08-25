@@ -212,20 +212,52 @@ L4:
 
 ### Evolution Path
 
-The allowlist is designed to naturally support gradual progression from experimental participation to mature participation, downstream repos that meet the requirements can apply to advance level by level (L1 → L2 → L3 → L4). The table below lists the requirements for advancing to each level.
+The Evolution Path includes both **Promotion** and **Demotion** directions. Downstream repos that meet the requirements for a given level can apply to advance step by step (L1 → L2 → L3 → L4). Likewise, repos that no longer meet their current level's requirements will be downgraded to the level that matches their actual performance. The table below describes each level:
 
-| Phase | Level | Requirements |
+| Phase | Level | Description |
 | :--- | :--- | :--- |
-| **Onboarding** | `L1` | 1. GitHub App installed <br/> 2. Provide verifiable accelerator hardware information <br/> 3. Provide a downstream adaptation repo for the accelerator |
-| **Observation** | `L2` | 1. Follow the standard [Workflow Configuration](#workflow-configuration) to receive events and report results <br/> 2. Must not send excessive or invalid requests to the Relay Server |
-| **Stable** | `L3` | 1. CI infrastructure must keep job queue time under `X min` per workflow <br/> 2. CI infrastructure must keep total run time under `X hour` per PR <br/> 3. Weekly CI success rate > `X %` (including both infra failures and test failures) |
-| **Mature** | `L4` | Fully determined by Core Maintainer, considering factors including but not limited to: <br/> - `community adoption`, <br/> - `hardware usage`, <br/> - `test coverage` (whether the PyTorch core test suite is required, @mikaylagawarecki), <br/> - `test pass rate`, <br/> - `oncall responsiveness`, etc. |
+| **Onboarding** | `L1` | Experimental onboarding. See [L1 Criteria](#l1). |
+| **Observation** | `L2` | Observation period. See [L2 Criteria](#l2). |
+| **Stable** | `L3` | Stable operation. See [L3 Criteria](#l3). |
+| **Mature** | `L4` | Mature and critical. See [L4 Criteria](#l4). |
 
 > \[!NOTE\]
-> - The requirements above are an **initial reference** and may **be adjusted over time based on real-world conditions** (e.g., determining the specific values of `X`).
-> - To maintain the PyTorch community's user experience, **downstream repos that no longer meet the requirements of their current level will be downgraded to the level that matches their actual status.**
-> - `L3` is the recommended long-term target for most downstream repos, as it provides a good balance between signal depth and minimal negative impact on upstream.
-> - `L4`: Only applies to a small number of downstream repos. Detailed requirements will be defined before any backend approaches the `L4` bar.
+> - `L3` is the recommended long-term target for most downstream repos. It balances signal depth with minimal impact on upstream.
+> - `L4` applies only to a small number of critical accelerators. Detailed requirements will be defined before any backend approaches the `L4` bar.
+
+### Promotion Process
+
+1. **Prepare evidence**: The downstream repo maintainer collects supporting materials per the target level's [promotion criteria](#criteria-for-every-level) (e.g., official website, HUD metrics screenshots).
+2. **Submit PR**: Submit a PR to update the [allowlist.yml](https://github.com/pytorch/pytorch/blob/main/.github/allowlist.yml) file in the PyTorch repo, with the evidence attached, requesting promotion to the target level.
+3. **Community review**: A PyTorch Maintainer reviews the PR and evaluates whether the downstream repo meets all the promotion criteria for the target level. Once approved and merged, the Relay Server automatically applies the new level's policy to that repo.
+
+### Demotion Process
+
+Demotion falls into two categories: **formal demotion** and **temporary downgrade**.
+
+#### Formal Demotion
+
+Formal demotion is a permanent level reduction triggered when a downstream repo continuously fails to meet its current level's [demotion criteria](#criteria-for-every-level):
+
+1. **Collect data**: The PyTorch CI Maintainer checks HUD data against the current level's demotion thresholds to confirm whether the repo has triggered a demotion condition.
+2. **Notify downstream**: Notify the downstream repo maintainers via email or other established channels that their repo has triggered demotion, including the specific metrics and a remediation deadline (2 working days).
+3. **Execute demotion**: If the repo does not recover within the deadline, the PyTorch CI Maintainer submits a PR to downgrade the repo to the level that matches its actual performance.
+4. **Re-promotion**: After fixing the root cause and meeting the promotion criteria again, a demoted repo can re-apply for promotion by following the [Promotion Process](#promotion-process).
+
+#### Temporary Downgrade
+
+Temporary downgrade is an **operational tool** for exceptional situations (e.g., an upstream PyTorch CI SEV, or a downstream repo causing large-scale disruption to the relay system). It must take effect **immediately** without modifying config files, and be **reversible** after the incident:
+
+1. **Admin page**: HUD will provides an admin page for PyTorch CI Maintainers to perform temporary downgrade operations.
+2. **Implementation**:
+   - The HUD admin page writes to a dedicated **temporary Redis cache** (the override table) via a new management API.
+   - When determining a downstream repo's effective level, the Relay Server consults two data sources:
+     - **Temporary config**: from the HUD admin page (Redis override cache)
+     - **Formal config**: synced from the `allowlist.yml` file in the PyTorch repo (Redis formal cache)
+   - **The temporary cache takes priority over the formal cache**: if an unexpired override record exists for a repo in the temporary cache, it wins; otherwise the formal cache is used.
+3. **Restoration**: There are two ways to restore the original level:
+   - **Automatic**: The override record has a default TTL of 24 hours, which the PyTorch CI Maintainer can customize. Once the record expires, the repo's level automatically falls back to the formal config.
+   - **Manual**: The PyTorch CI Maintainer clears the override record via the HUD admin page once the incident is resolved.
 
 ## Downstream Repos
 
@@ -305,6 +337,107 @@ jobs:
           url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           # other parameters...
 ```
+
+## Criteria for Every Level
+
+### L1
+
+#### L1 Promotion
+
+L1 is the experimental onboarding phase. Requirements:
+
+1. The GitHub App must be installed.
+2. Provide a downstream adaptation repo for the accelerator.
+
+#### L1 Demotion
+
+L1 is the lowest level and cannot be demoted further. If a downstream repo has been inactive for a long period or its maintainers request removal, the PyTorch CI Maintainer may remove it from the allowlist.
+
+### L2
+
+#### L2 Promotion
+
+L2 is the observation phase. Requirements:
+
+1. Follow the standard [Workflow Configuration](#workflow-configuration) to receive events and report results.
+2. Must not send excessive or invalid requests to the Relay Server.
+
+#### L2 Demotion
+
+A repo may be downgraded from L2 to L1 if either of the following occurs:
+
+1. Sends a large volume of invalid requests to the Relay Server, and fails to fix the issue within the remediation deadline (1 week) after being notified.
+2. Has no CI results reported for an extended period (over 4 weeks), indicating de facto abandonment.
+
+### L3
+
+#### L3 Promotion
+
+Downstream repositories must satisfy the following criteria before being promoted to L3. Unless otherwise specified, all metrics should be evaluated using data directly from the [HUD](https://hud.pytorch.org/crcr) dashboard.
+
+1. Prerequisites
+
+- Must have been operating at **L2 for at least 1 month** before applying for L3 promotion.
+- All metrics below must be met throughout the most recent **2-week** window of [HUD](https://hud.pytorch.org/crcr) data.
+
+2. Infrastructure
+
+| Metric | Target | Description |
+| :--- | :--- | :--- |
+| end-to-end time | < 3 h | The P50 time-to-signal (TTS), from webhook delivery to CI status report. |
+
+End-to-end time = queue wait + execution. The following metrics decompose it for diagnostic purposes, plus timeout rate as a reliability signal.
+
+| Metric | Target | Description |
+| :--- | :--- | :--- |
+| Max execution time | < 3 h | The longest "run" phase of any single job (excludes queue wait). |
+| Avg queue time | < 30 min | Average time a job waits before a runner picks it up (excludes execution). |
+| Timeout rate | < 1% | Percentage of jobs terminated due to timeout, measured over the evaluation window. |
+
+> [!NOTE]
+> Average queue time requirements may be relaxed for hardware-constrained accelerators with approval from the PyTorch CI maintainers. The end-to-end time requirement is not subject to relaxation.
+
+3. Test Quality
+
+| Metric | Target | Description |
+| :--- | :--- | :--- |
+| Job pass rate | > 90% | At least 90% of CI jobs should succeed. This is a **job-level** metric, not a test-level metric. |
+
+> [!NOTE]
+> Downstream repositories can define and choose their own test scope.
+
+#### L3 Demotion
+
+Demotion is triggered when any of the following conditions are observed over a **1 week** evaluation window:
+
+| Metric | Threshold | Description |
+| :--- | :--- | :--- |
+| Job pass rate | ≤ 90% | Sustained drop in CI job success rate over the evaluation window. |
+| Timeout rate | ≥ 1% | Sustained increase in job timeouts over the evaluation window. |
+| End-to-end time | > 3 h | The P50 end-to-end time consistently exceeds the 3 h target. |
+
+> [!NOTE]
+> - A one-off anomaly does not automatically trigger demotion — the metrics must breach the threshold across the evaluation window before action is taken.
+
+### L4
+
+#### L4 Promotion
+
+L4 is the mature and critical phase, reserved for a small number of essential accelerators. Promotion to L4 is decided by the PyTorch Core Maintainer based on a holistic assessment. Factors include but are not limited to:
+
+1. **Community adoption**: the scale and influence of the accelerator's usage in the community.
+2. **Hardware usage**: the actual deployment scale of the accelerator among PyTorch users.
+3. **Test coverage**: whether the accelerator is required to run the PyTorch core test suite.
+4. **Test pass rate**: the stability of the accelerator's CI test results.
+5. **Oncall responsiveness**: how quickly the downstream team responds to and resolves CI failures and PRs blocked on their jobs.
+6. Any other conditions the Core Maintainer deems necessary.
+
+> \[!NOTE\]
+> The L4 promotion criteria above are provisional. Before any downstream repo approaches the L4 bar, the PyTorch Core Maintainer will refine and finalize these into formal L4 promotion standards.
+
+#### L4 Demotion
+
+L4 demotion criteria will be defined alongside the formal promotion standards once a downstream repo reaches L4. The general principle is: when a repo no longer meets the core L4 requirements (e.g., severe test coverage drop, prolonged oncall unresponsiveness), the PyTorch Core Maintainer may downgrade it to L3.
 
 ## HUD Integration
 
